@@ -1,14 +1,20 @@
 <script setup lang="ts">
-
+import type {CV, CascadeClassifier} from '@techstark/opencv-js'
 import { ref, onMounted } from 'vue'
 
-declare const cv: any
+const cv = ref<CV | null>(null)
+
+onMounted(async () => {
+  
+})
 
 const video = ref<HTMLVideoElement>()
 const canvas = ref<HTMLCanvasElement>()
 const stream = ref<MediaStream | null>(null)
-let faceCascade: cv.CascadeClassifier | null = null
-let eyeCascade: cv.CascadeClassifier | null = null
+const isLoaded = ref(false)
+let faceCascade: CascadeClassifier | null = null
+let eyeCascade: CascadeClassifier | null = null
+
 
 const startWebcam = async () => {
   try {
@@ -30,61 +36,88 @@ const stopWebcam = () => {
 }
 
 const detectFacesAndEyes = () => {
-  if (!video.value || !canvas.value || !faceCascade || !eyeCascade) return
-
-  const ctx = canvas.value.getContext('2d')
-  if (!ctx) return
-
-  canvas.value.width = video.value.videoWidth
-  canvas.value.height = video.value.videoHeight
-  ctx.drawImage(video.value, 0, 0)
-
-  const src = cv.imread(canvas.value)
-  const gray = new cv.Mat()
-  cv.cvtColor(src, gray, cv.COLOR_RGBA2GRAY, 0)
-
-  const faces = new cv.RectVector()
-  const eyes = new cv.RectVector()
-
-  faceCascade.detectMultiScale(gray, faces, 1.1, 3, 0)
-
-  for (let i = 0; i < faces.size(); ++i) {
-    const faceRect = faces.get(i)
-    cv.rectangle(src, faceRect, [255, 0, 0, 255], 2)
-
-    const faceROI = gray.roi(faceRect)
-    eyeCascade.detectMultiScale(faceROI, eyes, 1.1, 3, 0)
-
-    for (let j = 0; j < eyes.size(); ++j) {
-      const eyeRect = eyes.get(j)
-      const eyeRectAbs = new cv.Rect(faceRect.x + eyeRect.x, faceRect.y + eyeRect.y, eyeRect.width, eyeRect.height)
-      cv.rectangle(src, eyeRectAbs, [0, 255, 0, 255], 2)
-    }
-
-    eyes.delete()
-    faceROI.delete()
+  console.log('Detect called')
+  if (!video.value || !canvas.value) {
+    console.log('Video or canvas not ready')
+    return
+  }
+  if (!faceCascade || !eyeCascade) {
+    console.log('Cascades not loaded')
+    return
+  }
+  if (typeof cv.value === 'undefined') {
+    console.log('CV not loaded')
+    return
+  }
+  if (video.value.videoWidth === 0 || video.value.videoHeight === 0) {
+    console.log('Video not ready')
+    return
   }
 
-  cv.imshow(canvas.value, src)
+  try {
+    const ctx = canvas.value.getContext('2d')
+    if (!ctx) {
+      console.log('No 2d context')
+      return
+    }
 
-  src.delete()
-  gray.delete()
-  faces.delete()
+    canvas.value.width = video.value.videoWidth
+    canvas.value.height = video.value.videoHeight
+    ctx.drawImage(video.value, 0, 0)
+
+    const src = cv.value.imread(canvas.value)
+    const gray = new cv.value.Mat()
+    cv.value.cvtColor(src, gray, cv.value.COLOR_RGBA2GRAY, 0)
+
+    const faces = new cv.value.RectVector()
+    const eyes = new cv.value.RectVector()
+
+    faceCascade.detectMultiScale(gray, faces, 1.1, 3, 0)
+    console.log('Faces detected:', faces.size())
+
+    for (let i = 0; i < faces.size(); ++i) {
+      const faceRect = faces.get(i)
+      cv.value.rectangle(src, faceRect, [255, 0, 0, 255], 2)
+
+      const faceROI = gray.roi(faceRect)
+      eyeCascade.detectMultiScale(faceROI, eyes, 1.1, 3, 0)
+      console.log('Eyes in face', i, ':', eyes.size())
+
+      for (let j = 0; j < eyes.size(); ++j) {
+        const eyeRect = eyes.get(j)
+        const eyeRectAbs = new cv.value.Rect(faceRect.x + eyeRect.x, faceRect.y + eyeRect.y, eyeRect.width, eyeRect.height)
+        cv.value.rectangle(src, eyeRectAbs, [0, 255, 0, 255], 2)
+      }
+
+      eyes.delete()
+      faceROI.delete()
+    }
+
+    cv.value.imshow(canvas.value, src)
+
+    src.delete()
+    gray.delete()
+    faces.delete()
+  } catch (error) {
+    console.error('Detection error:', error)
+  }
 }
 
-onMounted(() => {
+onMounted(async () => {
   // Load OpenCV
-  const script = document.createElement('script')
-  script.src = 'https://docs.opencv.org/4.5.2/opencv.js'
-  script.onload = async () => {
-    console.log('OpenCV loaded')
+    const cvPromise = (await import('@techstark/opencv-js')).default
 
-    // Load cascades
-    faceCascade = new cv.CascadeClassifier()
-    eyeCascade = new cv.CascadeClassifier()
+    console.log('OpenCV loaded', cvPromise)
+      cv.value = await cvPromise
+    console.log('OpenCV cv loaded', cv)
+    
+      // Load cascades
 
-    const faceCascadeUrl = 'https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_frontalface_default.xml'
-    const eyeCascadeUrl = 'https://raw.githubusercontent.com/opencv/opencv/master/data/haarcascades/haarcascade_eye.xml'
+    faceCascade = new cv.value.CascadeClassifier()
+    eyeCascade = new cv.value.CascadeClassifier()
+
+    const faceCascadeUrl = '/haarcascade_frontalface_default.xml'
+    const eyeCascadeUrl = '/haarcascade_eye.xml'
 
     const faceResponse = await fetch(faceCascadeUrl)
     const faceBuffer = await faceResponse.arrayBuffer()
@@ -97,8 +130,7 @@ onMounted(() => {
     eyeCascade.load(eyeData)
 
     console.log('Cascades loaded')
-  }
-  document.head.appendChild(script)
+    isLoaded.value = true
 })
 </script>
 
@@ -109,24 +141,21 @@ onMounted(() => {
       Face and Eye Detection
     </h1>
     <div class="mb-4">
-      <button
-        class="bg-blue-500 text-white px-4 py-2 rounded mr-2"
+      <UButton
         @click="startWebcam"
       >
         Start Webcam
-      </button>
-      <button
-        class="bg-red-500 text-white px-4 py-2 rounded mr-2"
+      </UButton>
+      <UButton
         @click="stopWebcam"
       >
         Stop Webcam
-      </button>
-      <button
-        class="bg-green-500 text-white px-4 py-2 rounded"
+      </UButton>
+      <UButton
         @click="detectFacesAndEyes"
       >
         Detect Faces & Eyes
-      </button>
+      </UButton>
     </div>
     <div class="flex space-x-4">
       <video
