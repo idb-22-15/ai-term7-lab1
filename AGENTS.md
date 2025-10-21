@@ -20,5 +20,5 @@ No test framework configured. Add Vitest or similar if needed.
 - **Naming**: PascalCase for components, camelCase for variables/functions
 - **Types**: Strict TypeScript, use interfaces for complex objects
 - **Error handling**: Use try/catch for async operations
-- **File structure**: Use FSD (Feature Sliced Design), pages in `app/_routes/`, layers: `app`, `shared` (model, components, ...etc)  
+- **File structure**: Use FSD (Feature Sliced Design), pages in `app/_routes/`, layers: `app`, `shared` (model, ui, ...etc)  
 - **Formatting**: ESLint with stylistic rules enabled
