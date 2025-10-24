@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import type {CV, CascadeClassifier} from '@techstark/opencv-js'
+import type { CV, CascadeClassifier } from '@techstark/opencv-js'
 import { ref, onMounted } from 'vue'
 
 const cv = ref<CV | null>(null)
 
 onMounted(async () => {
-  
+
 })
 
 const video = ref<HTMLVideoElement>()
@@ -14,7 +14,6 @@ const stream = ref<MediaStream | null>(null)
 const isLoaded = ref(false)
 let faceCascade: CascadeClassifier | null = null
 let eyeCascade: CascadeClassifier | null = null
-
 
 const startWebcam = async () => {
   try {
@@ -98,77 +97,78 @@ const detectFacesAndEyes = () => {
     src.delete()
     gray.delete()
     faces.delete()
-  } catch (error) {
+  }
+  catch (error) {
     console.error('Detection error:', error)
   }
 }
 
 onMounted(async () => {
   // Load OpenCV
-    const cvPromise = (await import('@techstark/opencv-js')).default
+  const cvPromise = (await import('@techstark/opencv-js')).default
 
-    console.log('OpenCV loaded', cvPromise)
-      cv.value = await cvPromise
-    console.log('OpenCV cv loaded', cv)
-    
-      // Load cascades
+  console.log('OpenCV loaded', cvPromise)
+  cv.value = await cvPromise
+  console.log('OpenCV cv loaded', cv)
 
-    faceCascade = new cv.value.CascadeClassifier()
-    eyeCascade = new cv.value.CascadeClassifier()
+  // Load cascades
 
-    const faceCascadeUrl = '/haarcascade_frontalface_default.xml'
-    const eyeCascadeUrl = '/haarcascade_eye.xml'
+  faceCascade = new cv.value.CascadeClassifier()
+  eyeCascade = new cv.value.CascadeClassifier()
 
-    const faceResponse = await fetch(faceCascadeUrl)
-    const faceBuffer = await faceResponse.arrayBuffer()
-    const faceData = new Uint8Array(faceBuffer)
-    faceCascade.load(faceData)
+  const faceCascadeUrl = '/haarcascade_frontalface_default.xml'
+  const eyeCascadeUrl = '/haarcascade_eye.xml'
 
-    const eyeResponse = await fetch(eyeCascadeUrl)
-    const eyeBuffer = await eyeResponse.arrayBuffer()
-    const eyeData = new Uint8Array(eyeBuffer)
-    eyeCascade.load(eyeData)
+  const faceResponse = await fetch(faceCascadeUrl)
+  const faceBuffer = await faceResponse.arrayBuffer()
+  const faceData = new Uint8Array(faceBuffer)
+  faceCascade.load(faceData)
 
-    console.log('Cascades loaded')
-    isLoaded.value = true
+  const eyeResponse = await fetch(eyeCascadeUrl)
+  const eyeBuffer = await eyeResponse.arrayBuffer()
+  const eyeData = new Uint8Array(eyeBuffer)
+  eyeCascade.load(eyeData)
+
+  console.log('Cascades loaded')
+  isLoaded.value = true
 })
 </script>
 
 <template>
   <UContainer>
-     <UPage>
+    <UPage>
       <h1 class="text-2xl font-bold mb-4">
-      Face and Eye Detection
-    </h1>
-    <div class="mb-4">
-      <UButton
-        @click="startWebcam"
-      >
-        Start Webcam
-      </UButton>
-      <UButton
-        @click="stopWebcam"
-      >
-        Stop Webcam
-      </UButton>
-      <UButton
-        @click="detectFacesAndEyes"
-      >
-        Detect Faces & Eyes
-      </UButton>
-    </div>
-    <div class="flex space-x-4">
-      <video
-        ref="video"
-        autoplay
-        playsinline
-        class="border"
-      />
-      <canvas
-        ref="canvas"
-        class="border"
-      />
-    </div>
- </UPage>
+        Face and Eye Detection
+      </h1>
+      <div class="mb-4">
+        <UButton
+          @click="startWebcam"
+        >
+          Start Webcam
+        </UButton>
+        <UButton
+          @click="stopWebcam"
+        >
+          Stop Webcam
+        </UButton>
+        <UButton
+          @click="detectFacesAndEyes"
+        >
+          Detect Faces & Eyes
+        </UButton>
+      </div>
+      <div class="flex space-x-4">
+        <video
+          ref="video"
+          autoplay
+          playsinline
+          class="border"
+        />
+        <canvas
+          ref="canvas"
+          class="border"
+        />
+      </div>
+    </UPage>
   </UContainer>
 </template>
