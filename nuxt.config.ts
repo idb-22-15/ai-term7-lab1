@@ -1,14 +1,13 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 export default defineNuxtConfig({
-  compatibilityDate: '2025-07-15',
-
-  devtools: { enabled: true },
 
   modules: ['@nuxt/eslint', '@nuxt/ui'],
 
   components: {
     dirs: [],
   },
+
+  devtools: { enabled: true },
 
   css: ['~/shared/assets/css/main.css'],
 
@@ -20,7 +19,7 @@ export default defineNuxtConfig({
   experimental: {
     typedPages: true,
   },
-
+  compatibilityDate: '2025-07-15',
 
   eslint: {
     config: {
