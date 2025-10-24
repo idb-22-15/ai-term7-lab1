@@ -24,15 +24,18 @@ const startWebcam = async () => {
   }
 }
 
-const stopWebcam = () => {
+const toggleWebcam = () => {
   if (stream.value) {
     stream.value.getTracks().forEach(track => track.stop())
     stream.value = null
+    isDetecting.value = false
+    if (detectionLoopId !== null) {
+      cancelAnimationFrame(detectionLoopId)
+      detectionLoopId = null
+    }
   }
-  isDetecting.value = false
-  if (detectionLoopId !== null) {
-    cancelAnimationFrame(detectionLoopId)
-    detectionLoopId = null
+  else {
+    startWebcam()
   }
 }
 
@@ -80,7 +83,7 @@ const detectFacesAndEyes = () => {
       const y1 = faceRect.y * 2
       const x2 = x1 + faceRect.width * 2
       const y2 = y1 + faceRect.height * 2
-      
+
       const pt1 = new cv.value.Point(x1, y1)
       const pt2 = new cv.value.Point(x2, y2)
       cv.value.rectangle(src, pt1, pt2, [255, 0, 0, 255], 2)
@@ -95,7 +98,7 @@ const detectFacesAndEyes = () => {
         const eyeY1 = y1 + eyeRect.y
         const eyeX2 = eyeX1 + eyeRect.width
         const eyeY2 = eyeY1 + eyeRect.height
-        
+
         const eyePt1 = new cv.value.Point(eyeX1, eyeY1)
         const eyePt2 = new cv.value.Point(eyeX2, eyeY2)
         cv.value.rectangle(src, eyePt1, eyePt2, [0, 255, 0, 255], 2)
@@ -175,15 +178,10 @@ onMounted(async () => {
     }
 
     isLoaded.value = true
-    await startWebcam()
   }
   catch (error) {
     console.error('Error during initialization:', error)
   }
-})
-
-onBeforeUnmount(() => {
-  stopWebcam()
 })
 </script>
 
@@ -196,16 +194,16 @@ onBeforeUnmount(() => {
         </h1>
         <div class="mb-4 space-x-2">
           <UButton
-            :disabled="!isLoaded"
+            :disabled="!isLoaded || !stream"
             @click="toggleDetection"
           >
             {{ isDetecting ? 'Stop Detection' : 'Start Detection' }}
           </UButton>
           <UButton
             :disabled="!isLoaded"
-            @click="stopWebcam"
+            @click="toggleWebcam"
           >
-            Stop Webcam
+            {{ stream ? 'Stop Webcam' : 'Start Webcam' }}
           </UButton>
         </div>
         <div class="flex space-x-4">
