@@ -76,16 +76,29 @@ const detectFacesAndEyes = () => {
 
     for (let i = 0; i < faces.size(); ++i) {
       const faceRect = faces.get(i)
-      const scaledFace = new cv.value.Rect(faceRect.x * 2, faceRect.y * 2, faceRect.width * 2, faceRect.height * 2)
-      cv.value.rectangle(src, scaledFace, [255, 0, 0, 255], 2)
+      const x1 = faceRect.x * 2
+      const y1 = faceRect.y * 2
+      const x2 = x1 + faceRect.width * 2
+      const y2 = y1 + faceRect.height * 2
+      
+      const pt1 = new cv.value.Point(x1, y1)
+      const pt2 = new cv.value.Point(x2, y2)
+      cv.value.rectangle(src, pt1, pt2, [255, 0, 0, 255], 2)
 
+      const scaledFace = new cv.value.Rect(x1, y1, faceRect.width * 2, faceRect.height * 2)
       const faceROI = gray.roi(scaledFace)
       eyeCascade.detectMultiScale(faceROI, eyes, 1.1, 4, 0, new cv.value.Size(15, 15))
 
       for (let j = 0; j < eyes.size(); ++j) {
         const eyeRect = eyes.get(j)
-        const eyeRectAbs = new cv.value.Rect(scaledFace.x + eyeRect.x, scaledFace.y + eyeRect.y, eyeRect.width, eyeRect.height)
-        cv.value.rectangle(src, eyeRectAbs, [0, 255, 0, 255], 2)
+        const eyeX1 = x1 + eyeRect.x
+        const eyeY1 = y1 + eyeRect.y
+        const eyeX2 = eyeX1 + eyeRect.width
+        const eyeY2 = eyeY1 + eyeRect.height
+        
+        const eyePt1 = new cv.value.Point(eyeX1, eyeY1)
+        const eyePt2 = new cv.value.Point(eyeX2, eyeY2)
+        cv.value.rectangle(src, eyePt1, eyePt2, [0, 255, 0, 255], 2)
       }
 
       eyes.delete()
