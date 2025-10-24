@@ -24,15 +24,21 @@ const startWebcam = async () => {
   }
 }
 
-const toggleWebcam = () => {
+const stopWebcam = () => {
   if (stream.value) {
     stream.value.getTracks().forEach(track => track.stop())
     stream.value = null
-    isDetecting.value = false
-    if (detectionLoopId !== null) {
-      cancelAnimationFrame(detectionLoopId)
-      detectionLoopId = null
-    }
+  }
+  isDetecting.value = false
+  if (detectionLoopId !== null) {
+    cancelAnimationFrame(detectionLoopId)
+    detectionLoopId = null
+  }
+}
+
+const toggleWebcam = () => {
+  if (stream.value) {
+    stopWebcam()
   }
   else {
     startWebcam()
@@ -140,48 +146,51 @@ const toggleDetection = () => {
   }
 }
 
-onMounted(async () => {
+const loadOpenCV = async () => {
+  const cvPromise = (await import('@techstark/opencv-js')).default
+  return await cvPromise
+}
+
+const loadCascadeClassifier = async (cvInstance: CV, url: string, filename: string): Promise<CascadeClassifier> => {
+  const response = await fetch(url)
+  const buffer = await response.arrayBuffer()
+  const data = new Uint8Array(buffer)
+  cvInstance.FS_createDataFile('/', filename, data, true, false, false)
+
+  const classifier = new cvInstance.CascadeClassifier()
+  classifier.load(filename)
+  return classifier
+}
+
+const initializeApp = async () => {
   try {
-    const cvPromise = (await import('@techstark/opencv-js')).default
-    cv.value = await cvPromise
+    cv.value = await loadOpenCV()
 
-    faceCascade = new cv.value.CascadeClassifier()
-    eyeCascade = new cv.value.CascadeClassifier()
+    faceCascade = await loadCascadeClassifier(
+      cv.value,
+      '/haarcascade_frontalface_default.xml',
+      'haarcascade_frontalface_default.xml'
+    )
 
-    const faceCascadeUrl = '/haarcascade_frontalface_default.xml'
-    const eyeCascadeUrl = '/haarcascade_eye.xml'
-
-    try {
-      const faceResponse = await fetch(faceCascadeUrl)
-      const faceBuffer = await faceResponse.arrayBuffer()
-      const faceData = new Uint8Array(faceBuffer)
-
-      cv.value.FS_createDataFile('/', 'haarcascade_frontalface_default.xml', faceData, true, false, false)
-      const faceLoaded = faceCascade.load('haarcascade_frontalface_default.xml')
-      console.log('Face cascade loaded:', faceLoaded)
-    }
-    catch (error) {
-      console.error('Error loading face cascade:', error)
-    }
-
-    try {
-      const eyeResponse = await fetch(eyeCascadeUrl)
-      const eyeBuffer = await eyeResponse.arrayBuffer()
-      const eyeData = new Uint8Array(eyeBuffer)
-
-      cv.value.FS_createDataFile('/', 'haarcascade_eye.xml', eyeData, true, false, false)
-      const eyeLoaded = eyeCascade.load('haarcascade_eye.xml')
-      console.log('Eye cascade loaded:', eyeLoaded)
-    }
-    catch (error) {
-      console.error('Error loading eye cascade:', error)
-    }
+    eyeCascade = await loadCascadeClassifier(
+      cv.value,
+      '/haarcascade_eye.xml',
+      'haarcascade_eye.xml'
+    )
 
     isLoaded.value = true
   }
   catch (error) {
     console.error('Error during initialization:', error)
   }
+}
+
+onMounted(() => {
+  initializeApp()
+})
+
+onBeforeUnmount(() => {
+  stopWebcam()
 })
 </script>
 
