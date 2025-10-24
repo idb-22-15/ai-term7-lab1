@@ -14,7 +14,7 @@ let detectionLoopId: number | null = null
 
 /**
  * Запускает веб-камеру и получает видеопоток
- * 
+ *
  * Действия:
  * 1. Запрашивает доступ к медиа-устройствам пользователя (видео)
  * 2. Получает медиапоток с веб-камеры через getUserMedia API
@@ -35,7 +35,7 @@ const startWebcam = async () => {
 
 /**
  * Останавливает веб-камеру и очищает ресурсы
- * 
+ *
  * Действия:
  * 1. Останавливает все дорожки (tracks) медиапотока
  * 2. Очищает ссылку на поток
@@ -56,7 +56,7 @@ const stopWebcam = () => {
 
 /**
  * Переключает состояние веб-камеры (включение/выключение)
- * 
+ *
  * Действия:
  * 1. Проверяет, активна ли камера
  * 2. Если активна - останавливает её
@@ -73,7 +73,7 @@ const toggleWebcam = () => {
 
 /**
  * Выполняет обнаружение лиц и глаз на текущем кадре видео
- * 
+ *
  * Действия:
  * 1. Проверяет наличие всех необходимых ресурсов (OpenCV, видео, canvas, каскады)
  * 2. Получает контекст 2D canvas'а
@@ -85,9 +85,16 @@ const toggleWebcam = () => {
  * 8. Для каждого найденного лица:
  *    - Рисует синий прямоугольник вокруг лица
  *    - Детектирует глаза внутри области лица (каскад глаз)
- *    - Рисует зелёные прямоугольники вокруг обнаруженных глаз
+ *    - Для каждого обнаруженного объекта проверяет соотношение сторон
+ *    - Пропускает объекты с неправильным соотношением (нос, рот)
+ *    - Рисует зелёные прямоугольники вокруг подтверждённых глаз
  * 9. Отображает результат на canvas
  * 10. Освобождает выделенную память OpenCV объектов
+ *
+ * Оптимизация:
+ * - minNeighbors = 6 (вместо 4) для более строгой фильтрации
+ * - minSize = (20, 20) для исключения очень маленьких объектов
+ * - Фильтрация по соотношению сторон (0.5 - 2.0) для отсева носа и рта
  */
 const detectFacesAndEyes = () => {
   if (!cv.value) return
@@ -140,10 +147,16 @@ const detectFacesAndEyes = () => {
 
       const scaledFace = new cv.value.Rect(x1, y1, faceRect.width * 2, faceRect.height * 2)
       const faceROI = gray.roi(scaledFace)
-      eyeCascade.detectMultiScale(faceROI, eyes, 1.1, 4, 0, new cv.value.Size(15, 15))
+      eyeCascade.detectMultiScale(faceROI, eyes, 1.15, 6, 0, new cv.value.Size(20, 20))
 
       for (let j = 0; j < eyes.size(); ++j) {
         const eyeRect = eyes.get(j)
+        const aspectRatio = eyeRect.width / eyeRect.height
+
+        if (aspectRatio < 0.5 || aspectRatio > 2.0) {
+          continue
+        }
+
         const eyeX1 = x1 + eyeRect.x
         const eyeY1 = y1 + eyeRect.y
         const eyeX2 = eyeX1 + eyeRect.width
@@ -172,7 +185,7 @@ const detectFacesAndEyes = () => {
 
 /**
  * Переключает режим обнаружения лиц и глаз (включение/выключение)
- * 
+ *
  * Действия:
  * 1. Проверяет текущее состояние обнаружения
  * 2. Если выключено:
@@ -204,12 +217,12 @@ const toggleDetection = () => {
 
 /**
  * Загружает библиотеку OpenCV.js
- * 
+ *
  * Действия:
  * 1. Динамически импортирует модуль @techstark/opencv-js
  * 2. Ожидает инициализации WebAssembly модуля
  * 3. Возвращает объект OpenCV для работы с компьютерным зрением
- * 
+ *
  * @returns {Promise<CV>} Объект OpenCV с методами для обработки изображений
  */
 const loadOpenCV = async () => {
@@ -219,7 +232,7 @@ const loadOpenCV = async () => {
 
 /**
  * Загружает XML-файл каскада классификатора и инициализирует классификатор
- * 
+ *
  * Действия:
  * 1. Загружает файл каскада с сервера по URL (например, haarcascade_frontalface_default.xml)
  * 2. Конвертирует полученные данные в Uint8Array
@@ -227,7 +240,7 @@ const loadOpenCV = async () => {
  * 4. Инициализирует объект CascadeClassifier
  * 5. Загружает данные каскада в классификатор
  * 6. Возвращает инициализированный классификатор
- * 
+ *
  * @param {CV} cvInstance - Объект OpenCV для работы
  * @param {string} url - URL к файлу каскада (например, '/haarcascade_frontalface_default.xml')
  * @param {string} filename - Имя файла для виртуальной файловой системы
@@ -246,7 +259,7 @@ const loadCascadeClassifier = async (cvInstance: CV, url: string, filename: stri
 
 /**
  * Инициализирует приложение при загрузке компонента
- * 
+ *
  * Действия:
  * 1. Загружает библиотеку OpenCV
  * 2. Загружает каскад классификатора для обнаружения лиц
@@ -261,13 +274,13 @@ const initializeApp = async () => {
     faceCascade = await loadCascadeClassifier(
       cv.value,
       '/haarcascade_frontalface_default.xml',
-      'haarcascade_frontalface_default.xml'
+      'haarcascade_frontalface_default.xml',
     )
 
     eyeCascade = await loadCascadeClassifier(
       cv.value,
       '/haarcascade_eye.xml',
-      'haarcascade_eye.xml'
+      'haarcascade_eye.xml',
     )
 
     isLoaded.value = true
@@ -290,10 +303,7 @@ onBeforeUnmount(() => {
   <ClientOnly>
     <UContainer>
       <UPage>
-        <h1 class="text-2xl font-bold mb-4">
-          Face and Eye Detection
-        </h1>
-        <div class="mb-4 space-x-2">
+        <div class="my-4 space-x-2">
           <UButton
             :disabled="!isLoaded || !stream"
             @click="toggleDetection"
@@ -307,16 +317,16 @@ onBeforeUnmount(() => {
             {{ stream ? 'Stop Webcam' : 'Start Webcam' }}
           </UButton>
         </div>
-        <div class="flex space-x-4">
+        <div class="grid grid-cols-2 gap-4">
           <video
             ref="video"
             autoplay
             playsinline
-            class="border"
+            class="border w-full h-full"
           />
           <canvas
             ref="canvas"
-            class="border"
+            class="border w-full h-full"
           />
         </div>
       </UPage>

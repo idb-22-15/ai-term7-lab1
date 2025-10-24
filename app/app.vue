@@ -3,7 +3,7 @@
 
 <template>
   <UApp>
-    <UHeader title="Ai">
+    <UHeader title="Ai Face and Eye Detection">
       <template #toggle>
         {{ '' }}
       </template>
