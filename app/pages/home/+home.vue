@@ -1,19 +1,16 @@
 <script setup lang="ts">
 import type { CV, CascadeClassifier } from '@techstark/opencv-js'
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount } from 'vue'
 
 const cv = ref<CV | null>(null)
-
-onMounted(async () => {
-
-})
-
 const video = ref<HTMLVideoElement>()
 const canvas = ref<HTMLCanvasElement>()
 const stream = ref<MediaStream | null>(null)
 const isLoaded = ref(false)
+const isDetecting = ref(false)
 let faceCascade: CascadeClassifier | null = null
 let eyeCascade: CascadeClassifier | null = null
+let detectionLoopId: number | null = null
 
 const startWebcam = async () => {
   try {
@@ -32,33 +29,32 @@ const stopWebcam = () => {
     stream.value.getTracks().forEach(track => track.stop())
     stream.value = null
   }
+  isDetecting.value = false
+  if (detectionLoopId !== null) {
+    cancelAnimationFrame(detectionLoopId)
+    detectionLoopId = null
+  }
 }
 
 const detectFacesAndEyes = () => {
   if (!cv.value) return
 
-  console.log('Detect called')
   if (!video.value || !canvas.value) {
-    console.log('Video or canvas not ready')
     return
   }
   if (!faceCascade || !eyeCascade) {
-    console.log('Cascades not loaded')
     return
   }
   if (typeof cv.value === 'undefined') {
-    console.log('CV not loaded')
     return
   }
   if (video.value.videoWidth === 0 || video.value.videoHeight === 0) {
-    console.log('Video not ready')
     return
   }
 
   try {
     const ctx = canvas.value.getContext('2d')
     if (!ctx) {
-      console.log('No 2d context')
       return
     }
 
@@ -74,7 +70,6 @@ const detectFacesAndEyes = () => {
     const eyes = new cv.value.RectVector()
 
     faceCascade.detectMultiScale(gray, faces, 1.1, 3, 0)
-    console.log('Faces detected:', faces.size())
 
     for (let i = 0; i < faces.size(); ++i) {
       const faceRect = faces.get(i)
@@ -82,7 +77,6 @@ const detectFacesAndEyes = () => {
 
       const faceROI = gray.roi(faceRect)
       eyeCascade.detectMultiScale(faceROI, eyes, 1.1, 3, 0)
-      console.log('Eyes in face', i, ':', eyes.size())
 
       for (let j = 0; j < eyes.size(); ++j) {
         const eyeRect = eyes.get(j)
@@ -105,72 +99,100 @@ const detectFacesAndEyes = () => {
   }
 }
 
+const toggleDetection = () => {
+  if (!isDetecting.value) {
+    isDetecting.value = true
+    const loop = () => {
+      if (isDetecting.value) {
+        detectFacesAndEyes()
+        detectionLoopId = requestAnimationFrame(loop)
+      }
+    }
+    loop()
+  }
+  else {
+    isDetecting.value = false
+    if (detectionLoopId !== null) {
+      cancelAnimationFrame(detectionLoopId)
+      detectionLoopId = null
+    }
+  }
+}
+
 onMounted(async () => {
-  // Load OpenCV
-  const cvPromise = (await import('@techstark/opencv-js')).default
+  try {
+    const cvPromise = (await import('@techstark/opencv-js')).default
+    cv.value = await cvPromise
 
-  console.log('OpenCV loaded', cvPromise)
-  cv.value = await cvPromise
-  console.log('OpenCV cv loaded', cv)
+    faceCascade = new cv.value.CascadeClassifier()
+    eyeCascade = new cv.value.CascadeClassifier()
 
-  // Load cascades
+    const faceCascadeUrl = '/haarcascade_frontalface_default.xml'
+    const eyeCascadeUrl = '/haarcascade_eye.xml'
 
-  faceCascade = new cv.value.CascadeClassifier()
-  eyeCascade = new cv.value.CascadeClassifier()
+    try {
+      const faceLoaded = faceCascade.load(faceCascadeUrl)
+      console.log('Face cascade loaded:', faceLoaded)
+    }
+    catch (error) {
+      console.error('Error loading face cascade:', error)
+    }
 
-  const faceCascadeUrl = '/haarcascade_frontalface_default.xml'
-  const eyeCascadeUrl = '/haarcascade_eye.xml'
+    try {
+      const eyeLoaded = eyeCascade.load(eyeCascadeUrl)
+      console.log('Eye cascade loaded:', eyeLoaded)
+    }
+    catch (error) {
+      console.error('Error loading eye cascade:', error)
+    }
 
-  const faceResponse = await fetch(faceCascadeUrl)
-  const faceBuffer = await faceResponse.arrayBuffer()
-  const faceData = new Uint8Array(faceBuffer)
-  faceCascade.load(faceData)
+    isLoaded.value = true
+    await startWebcam()
+  }
+  catch (error) {
+    console.error('Error during initialization:', error)
+  }
+})
 
-  const eyeResponse = await fetch(eyeCascadeUrl)
-  const eyeBuffer = await eyeResponse.arrayBuffer()
-  const eyeData = new Uint8Array(eyeBuffer)
-  eyeCascade.load(eyeData)
-
-  console.log('Cascades loaded')
-  isLoaded.value = true
+onBeforeUnmount(() => {
+  stopWebcam()
 })
 </script>
 
 <template>
-  <UContainer>
-    <UPage>
-      <h1 class="text-2xl font-bold mb-4">
-        Face and Eye Detection
-      </h1>
-      <div class="mb-4">
-        <UButton
-          @click="startWebcam"
-        >
-          Start Webcam
-        </UButton>
-        <UButton
-          @click="stopWebcam"
-        >
-          Stop Webcam
-        </UButton>
-        <UButton
-          @click="detectFacesAndEyes"
-        >
-          Detect Faces & Eyes
-        </UButton>
-      </div>
-      <div class="flex space-x-4">
-        <video
-          ref="video"
-          autoplay
-          playsinline
-          class="border"
-        />
-        <canvas
-          ref="canvas"
-          class="border"
-        />
-      </div>
-    </UPage>
-  </UContainer>
+  <ClientOnly>
+    <UContainer>
+      <UPage>
+        <h1 class="text-2xl font-bold mb-4">
+          Face and Eye Detection
+        </h1>
+        <div class="mb-4 space-x-2">
+          <UButton
+            :disabled="!isLoaded"
+            @click="toggleDetection"
+          >
+            {{ isDetecting ? 'Stop Detection' : 'Start Detection' }}
+          </UButton>
+          <UButton
+            :disabled="!isLoaded"
+            @click="stopWebcam"
+          >
+            Stop Webcam
+          </UButton>
+        </div>
+        <div class="flex space-x-4">
+          <video
+            ref="video"
+            autoplay
+            playsinline
+            class="border"
+          />
+          <canvas
+            ref="canvas"
+            class="border"
+          />
+        </div>
+      </UPage>
+    </UContainer>
+  </ClientOnly>
 </template>
