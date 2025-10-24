@@ -35,6 +35,8 @@ const stopWebcam = () => {
 }
 
 const detectFacesAndEyes = () => {
+  if (!cv.value) return
+
   console.log('Detect called')
   if (!video.value || !canvas.value) {
     console.log('Video or canvas not ready')
