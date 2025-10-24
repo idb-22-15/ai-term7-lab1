@@ -53,7 +53,7 @@ const detectFacesAndEyes = () => {
   }
 
   try {
-    const ctx = canvas.value.getContext('2d')
+    const ctx = canvas.value.getContext('2d', { willReadFrequently: true })
     if (!ctx) {
       return
     }
@@ -66,21 +66,25 @@ const detectFacesAndEyes = () => {
     const gray = new cv.value.Mat()
     cv.value.cvtColor(src, gray, cv.value.COLOR_RGBA2GRAY, 0)
 
+    const small = new cv.value.Mat()
+    cv.value.resize(gray, small, new cv.value.Size(gray.cols / 2, gray.rows / 2))
+
     const faces = new cv.value.RectVector()
     const eyes = new cv.value.RectVector()
 
-    faceCascade.detectMultiScale(gray, faces, 1.1, 3, 0)
+    faceCascade.detectMultiScale(small, faces, 1.15, 4, 0, new cv.value.Size(30, 30))
 
     for (let i = 0; i < faces.size(); ++i) {
       const faceRect = faces.get(i)
-      cv.value.rectangle(src, faceRect, [255, 0, 0, 255], 2)
+      const scaledFace = new cv.value.Rect(faceRect.x * 2, faceRect.y * 2, faceRect.width * 2, faceRect.height * 2)
+      cv.value.rectangle(src, scaledFace, [255, 0, 0, 255], 2)
 
-      const faceROI = gray.roi(faceRect)
-      eyeCascade.detectMultiScale(faceROI, eyes, 1.1, 3, 0)
+      const faceROI = gray.roi(scaledFace)
+      eyeCascade.detectMultiScale(faceROI, eyes, 1.1, 4, 0, new cv.value.Size(15, 15))
 
       for (let j = 0; j < eyes.size(); ++j) {
         const eyeRect = eyes.get(j)
-        const eyeRectAbs = new cv.value.Rect(faceRect.x + eyeRect.x, faceRect.y + eyeRect.y, eyeRect.width, eyeRect.height)
+        const eyeRectAbs = new cv.value.Rect(scaledFace.x + eyeRect.x, scaledFace.y + eyeRect.y, eyeRect.width, eyeRect.height)
         cv.value.rectangle(src, eyeRectAbs, [0, 255, 0, 255], 2)
       }
 
@@ -92,6 +96,7 @@ const detectFacesAndEyes = () => {
 
     src.delete()
     gray.delete()
+    small.delete()
     faces.delete()
   }
   catch (error) {
@@ -131,7 +136,12 @@ onMounted(async () => {
     const eyeCascadeUrl = '/haarcascade_eye.xml'
 
     try {
-      const faceLoaded = faceCascade.load(faceCascadeUrl)
+      const faceResponse = await fetch(faceCascadeUrl)
+      const faceBuffer = await faceResponse.arrayBuffer()
+      const faceData = new Uint8Array(faceBuffer)
+
+      cv.value.FS_createDataFile('/', 'haarcascade_frontalface_default.xml', faceData, true, false, false)
+      const faceLoaded = faceCascade.load('haarcascade_frontalface_default.xml')
       console.log('Face cascade loaded:', faceLoaded)
     }
     catch (error) {
@@ -139,7 +149,12 @@ onMounted(async () => {
     }
 
     try {
-      const eyeLoaded = eyeCascade.load(eyeCascadeUrl)
+      const eyeResponse = await fetch(eyeCascadeUrl)
+      const eyeBuffer = await eyeResponse.arrayBuffer()
+      const eyeData = new Uint8Array(eyeBuffer)
+
+      cv.value.FS_createDataFile('/', 'haarcascade_eye.xml', eyeData, true, false, false)
+      const eyeLoaded = eyeCascade.load('haarcascade_eye.xml')
       console.log('Eye cascade loaded:', eyeLoaded)
     }
     catch (error) {
