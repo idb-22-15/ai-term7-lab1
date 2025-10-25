@@ -100,8 +100,9 @@ function startDetection() {
     return
   }
   isDetecting.value = true
+  if (!video.value || !canvas.value) return
   // Start detection - video is already showing
-  detectAndMatch(video.value!, canvas.value!, objectImage.value)
+  detectAndMatch(video.value, canvas.value, objectImage.value)
 }
 
 function showVideoFeed() {
