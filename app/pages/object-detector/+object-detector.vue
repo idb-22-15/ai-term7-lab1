@@ -31,13 +31,7 @@ async function initializeCamera() {
     isCameraLoading.value = true
     cameraError.value = ''
 
-    stream.value = await navigator.mediaDevices.getUserMedia({
-      video: {
-        width: { ideal: 640 },
-        height: { ideal: 480 },
-        facingMode: 'user',
-      },
-    })
+    stream.value = await navigator.mediaDevices.getUserMedia({ video: true })
 
     if (video.value) {
       video.value.srcObject = stream.value
@@ -47,8 +41,7 @@ async function initializeCamera() {
           canvas.value.width = video.value!.videoWidth
           canvas.value.height = video.value!.videoHeight
         }
-        isCameraReady.value = true
-        isCameraLoading.value = false
+        video.value!.play()
       }
       video.value.oncanplay = () => {
         isCameraReady.value = true
@@ -290,18 +283,6 @@ function retryCamera() {
               >
                 Загрузите изображение объекта для начала анализа.
               </div>
-            </div>
-          </div>
-
-          <div class="bg-white rounded-lg shadow-md p-4">
-            <h3 class="text-lg font-semibold mb-2">
-              Информация
-            </h3>
-            <div class="text-sm text-gray-600 space-y-1">
-              <p>• Используется алгоритм ORB для поиска устойчивых признаков</p>
-              <p>• Зеленая рамка показывает найденный объект</p>
-              <p>• Работает в реальном времени</p>
-              <p>• Устойчив к поворотам и изменению масштаба</p>
             </div>
           </div>
         </div>
