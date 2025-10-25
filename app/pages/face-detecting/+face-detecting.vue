@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { CV, CascadeClassifier } from '@techstark/opencv-js'
 import { ref, onMounted, onBeforeUnmount } from 'vue'
+import cvPromise from '@techstark/opencv-js'
 
 const cv = ref<CV | null>(null)
 const video = ref<HTMLVideoElement>()
@@ -14,12 +15,6 @@ let detectionLoopId: number | null = null
 
 /**
  * Запускает веб-камеру и получает видеопоток
- *
- * Действия:
- * 1. Запрашивает доступ к медиа-устройствам пользователя (видео)
- * 2. Получает медиапоток с веб-камеры через getUserMedia API
- * 3. Подключает поток к видео-элементу для отображения
- * 4. Обрабатывает ошибки доступа (например, отказ пользователя)
  */
 const startWebcam = async () => {
   try {
@@ -35,12 +30,6 @@ const startWebcam = async () => {
 
 /**
  * Останавливает веб-камеру и очищает ресурсы
- *
- * Действия:
- * 1. Останавливает все дорожки (tracks) медиапотока
- * 2. Очищает ссылку на поток
- * 3. Отключает обнаружение лиц и глаз
- * 4. Отменяет зарегистрированный requestAnimationFrame для цикла обработки
  */
 const stopWebcam = () => {
   if (stream.value) {
@@ -56,11 +45,6 @@ const stopWebcam = () => {
 
 /**
  * Переключает состояние веб-камеры (включение/выключение)
- *
- * Действия:
- * 1. Проверяет, активна ли камера
- * 2. Если активна - останавливает её
- * 3. Если неактивна - запускает её
  */
 const toggleWebcam = () => {
   if (stream.value) {
@@ -73,28 +57,6 @@ const toggleWebcam = () => {
 
 /**
  * Выполняет обнаружение лиц и глаз на текущем кадре видео
- *
- * Действия:
- * 1. Проверяет наличие всех необходимых ресурсов (OpenCV, видео, canvas, каскады)
- * 2. Получает контекст 2D canvas'а
- * 3. Копирует текущий кадр видео на canvas
- * 4. Читает изображение из canvas в формат OpenCV
- * 5. Конвертирует RGBA в оттенки серого для ускорения обработки
- * 6. Уменьшает изображение в 2 раза для повышения производительности
- * 7. Детектирует лица на уменьшенном изображении (каскад лиц)
- * 8. Для каждого найденного лица:
- *    - Рисует синий прямоугольник вокруг лица
- *    - Детектирует глаза внутри области лица (каскад глаз)
- *    - Для каждого обнаруженного объекта проверяет соотношение сторон
- *    - Пропускает объекты с неправильным соотношением (нос, рот)
- *    - Рисует зелёные прямоугольники вокруг подтверждённых глаз
- * 9. Отображает результат на canvas
- * 10. Освобождает выделенную память OpenCV объектов
- *
- * Оптимизация:
- * - minNeighbors = 6 (вместо 4) для более строгой фильтрации
- * - minSize = (20, 20) для исключения очень маленьких объектов
- * - Фильтрация по соотношению сторон (0.5 - 2.0) для отсева носа и рта
  */
 const detectFacesAndEyes = () => {
   if (!cv.value) return
@@ -185,15 +147,6 @@ const detectFacesAndEyes = () => {
 
 /**
  * Переключает режим обнаружения лиц и глаз (включение/выключение)
- *
- * Действия:
- * 1. Проверяет текущее состояние обнаружения
- * 2. Если выключено:
- *    - Устанавливает флаг обнаружения в активное состояние
- *    - Запускает цикл обработки кадров через requestAnimationFrame
- * 3. Если включено:
- *    - Устанавливает флаг обнаружения в неактивное состояние
- *    - Отменяет запланированный requestAnimationFrame
  */
 const toggleDetection = () => {
   if (!isDetecting.value) {
@@ -217,34 +170,14 @@ const toggleDetection = () => {
 
 /**
  * Загружает библиотеку OpenCV.js
- *
- * Действия:
- * 1. Динамически импортирует модуль @techstark/opencv-js
- * 2. Ожидает инициализации WebAssembly модуля
- * 3. Возвращает объект OpenCV для работы с компьютерным зрением
- *
- * @returns {Promise<CV>} Объект OpenCV с методами для обработки изображений
  */
-const loadOpenCV = async () => {
-  const cvPromise = (await import('@techstark/opencv-js')).default
-  return await cvPromise
-}
+// const loadOpenCV = async () => {
+//   const cvPromise = (await import('@techstark/opencv-js')).default
+//   return await cvPromise
+// }
 
 /**
  * Загружает XML-файл каскада классификатора и инициализирует классификатор
- *
- * Действия:
- * 1. Загружает файл каскада с сервера по URL (например, haarcascade_frontalface_default.xml)
- * 2. Конвертирует полученные данные в Uint8Array
- * 3. Создаёт виртуальный файл в файловой системе OpenCV
- * 4. Инициализирует объект CascadeClassifier
- * 5. Загружает данные каскада в классификатор
- * 6. Возвращает инициализированный классификатор
- *
- * @param {CV} cvInstance - Объект OpenCV для работы
- * @param {string} url - URL к файлу каскада (например, '/haarcascade_frontalface_default.xml')
- * @param {string} filename - Имя файла для виртуальной файловой системы
- * @returns {Promise<CascadeClassifier>} Инициализированный классификатор
  */
 const loadCascadeClassifier = async (cvInstance: CV, url: string, filename: string): Promise<CascadeClassifier> => {
   const response = await fetch(url)
@@ -259,17 +192,10 @@ const loadCascadeClassifier = async (cvInstance: CV, url: string, filename: stri
 
 /**
  * Инициализирует приложение при загрузке компонента
- *
- * Действия:
- * 1. Загружает библиотеку OpenCV
- * 2. Загружает каскад классификатора для обнаружения лиц
- * 3. Загружает каскад классификатора для обнаружения глаз
- * 4. Устанавливает флаг готовности приложения (isLoaded = true)
- * 5. Обрабатывает ошибки инициализации
  */
 const initializeApp = async () => {
   try {
-    cv.value = await loadOpenCV()
+    cv.value = await cvPromise
 
     faceCascade = await loadCascadeClassifier(
       cv.value,
