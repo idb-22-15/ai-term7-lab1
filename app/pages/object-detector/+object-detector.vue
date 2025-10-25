@@ -247,7 +247,7 @@ function retryCamera() {
                   <img
                     :src="objectImagePreview"
                     alt="Object preview"
-                    class="w-full h-32 object-cover rounded-lg border"
+                    class="w-full object-contain rounded-lg border"
                   >
                 </div>
               </div>
