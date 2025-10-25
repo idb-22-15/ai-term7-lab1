@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { HomePage } from '~/pages/home'
+import { FaceDetectingPage } from '~/pages/face-detecting'
 </script>
 
 <template>
-  <HomePage />
+  <FaceDetectingPage />
 </template>
