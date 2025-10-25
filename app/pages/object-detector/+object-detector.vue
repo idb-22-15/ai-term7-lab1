@@ -1,14 +1,16 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useSurfDetector } from './model/use-surf-detector'
+import cvPromise, { type CV } from '@techstark/opencv-js'
+
+const cv: CV = await cvPromise
 
 const video = ref<HTMLVideoElement>()
 const canvas = ref<HTMLCanvasElement>()
 const objectImage = ref<HTMLImageElement>()
-const { detectAndMatch } = useSurfDetector()
+const { detectAndMatch } = useSurfDetector(cv)
 
 onMounted(async () => {
-  await initOpenCv()
   const stream = await navigator.mediaDevices.getUserMedia({ video: true })
   video.value!.srcObject = stream
 })

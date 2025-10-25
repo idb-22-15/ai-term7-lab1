@@ -1,6 +1,6 @@
-import cv from '@techstack/opencv-js'
+import type { CV } from '@techstark/opencv-js'
 
-export function useSurfDetector() {
+export function useSurfDetector(cv: CV) {
   function detectAndMatch(video: HTMLVideoElement, canvas: HTMLCanvasElement, objectImg: HTMLImageElement) {
     const ctx = canvas.getContext('2d')!
     const cap = new cv.VideoCapture(video)
