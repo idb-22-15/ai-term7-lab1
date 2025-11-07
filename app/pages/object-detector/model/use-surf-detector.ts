@@ -31,7 +31,7 @@ export function useSurfDetector(cv: CV) {
     // Draw object keypoints on object canvas if provided
     if (objectCanvas) {
       const objectDisplay = objectMat.clone()
-      cv.drawKeypoints(objectGray, objKp, objectDisplay, [255, 0, 0, 255])
+      cv.drawKeypoints(objectGray, objKp, objectDisplay, [0, 0, 255, 255]) // Red in BGR
       cv.imshow(objectCanvas, objectDisplay)
       objectDisplay.delete()
     }
@@ -129,58 +129,108 @@ export function useSurfDetector(cv: CV) {
               }
             }
 
-            // Draw keypoints on frame
-            cv.drawKeypoints(frame, kp, frame, [255, 0, 0, 255])
+            // Draw keypoints on frame - синие точки (BGR)
+            cv.drawKeypoints(frame, kp, frame, [255, 0, 0, 255]) // Blue in BGR
+
+            // Draw circles on matched keypoints - голубые точки (BGR)
+            for (const match of goodMatchesArray.slice(0, 30)) {
+              const scenePt = kp.get(match.trainIdx)
+              if (scenePt) {
+                cv.circle(frame, new cv.Point(scenePt.pt.x, scenePt.pt.y), 4, [255, 255, 0, 255], -1) // Cyan in BGR
+              }
+            }
 
             // Draw match visualization on matchCanvas if provided
             if (matchCanvas) {
-              // Create composite image with object on left and scene on right
-              const matchOutput = new cv.Mat(
-                Math.max(objectMat.rows, frame.rows),
-                objectMat.cols + frame.cols,
-                cv.CV_8UC4,
-              )
-              matchOutput.setTo([0, 0, 0, 255])
+              try {
+                // Resize images to same height for side-by-side comparison
+                const targetHeight = 400
+                const objScale = targetHeight / objectMat.rows
+                const frameScale = targetHeight / frame.rows
 
-              // Copy object image to left side
-              const objROI = matchOutput.roi(new cv.Rect(0, 0, objectMat.cols, objectMat.rows))
-              objectMat.copyTo(objROI)
-              objROI.delete()
+                const objResized = new cv.Mat()
+                const frameResized = new cv.Mat()
 
-              // Copy frame to right side
-              const frameROI = matchOutput.roi(new cv.Rect(objectMat.cols, 0, frame.cols, frame.rows))
-              frame.copyTo(frameROI)
-              frameROI.delete()
+                cv.resize(objectMat, objResized, new cv.Size(
+                  Math.round(objectMat.cols * objScale),
+                  targetHeight,
+                ))
+                cv.resize(frame, frameResized, new cv.Size(
+                  Math.round(frame.cols * frameScale),
+                  targetHeight,
+                ))
 
-              // Draw lines between matches
-              const maxLines = 30
-              for (let i = 0; i < Math.min(goodMatchesArray.length, maxLines); i++) {
-                const match = goodMatchesArray[i]
-                if (!match) continue
-                const objPt = objKp.get(match.queryIdx)
-                const scenePt = kp.get(match.trainIdx)
-                if (!objPt || !scenePt) continue
+                // Create composite
+                const width = objResized.cols + frameResized.cols
+                const matchOutput = new cv.Mat(targetHeight, width, cv.CV_8UC4)
+                matchOutput.setTo([20, 20, 20, 255])
 
-                const pt1 = new cv.Point(objPt.pt.x, objPt.pt.y)
-                const pt2 = new cv.Point(scenePt.pt.x + objectMat.cols, scenePt.pt.y)
+                // Draw lines and circles
+                for (let i = 0; i < Math.min(goodMatchesArray.length, 30); i++) {
+                  const match = goodMatchesArray[i]
+                  if (!match) continue
+                  const objPt = objKp.get(match.queryIdx)
+                  const scenePt = kp.get(match.trainIdx)
+                  if (!objPt || !scenePt) continue
 
-                // Draw line with varying colors based on quality
-                const color = i < 10 ? [0, 255, 0, 255] : [255, 255, 0, 255]
-                cv.line(matchOutput, pt1, pt2, color, 1)
+                  const pt1 = new cv.Point(
+                    Math.round(objPt.pt.x * objScale),
+                    Math.round(objPt.pt.y * objScale),
+                  )
+                  const pt2 = new cv.Point(
+                    Math.round(scenePt.pt.x * frameScale + objResized.cols),
+                    Math.round(scenePt.pt.y * frameScale),
+                  )
 
-                // Draw circles
-                cv.circle(matchOutput, pt1, 3, [255, 0, 0, 255], -1)
-                cv.circle(matchOutput, pt2, 3, [0, 255, 255, 255], -1)
+                  // Draw line - green for best, yellow for good (BGR)
+                  const color = i < 10 ? [0, 255, 0, 255] : [0, 255, 255, 255] // Green or Yellow in BGR
+                  cv.line(matchOutput, pt1, pt2, color, 1)
+                }
+
+                // Copy resized images over the lines
+                const objRect = new cv.Rect(0, 0, objResized.cols, objResized.rows)
+                const frameRect = new cv.Rect(objResized.cols, 0, frameResized.cols, frameResized.rows)
+
+                objResized.copyTo(matchOutput.roi(objRect))
+                frameResized.copyTo(matchOutput.roi(frameRect))
+
+                // Draw circles on top
+                for (let i = 0; i < Math.min(goodMatchesArray.length, 30); i++) {
+                  const match = goodMatchesArray[i]
+                  if (!match) continue
+                  const objPt = objKp.get(match.queryIdx)
+                  const scenePt = kp.get(match.trainIdx)
+                  if (!objPt || !scenePt) continue
+
+                  const pt1 = new cv.Point(
+                    Math.round(objPt.pt.x * objScale),
+                    Math.round(objPt.pt.y * objScale),
+                  )
+                  const pt2 = new cv.Point(
+                    Math.round(scenePt.pt.x * frameScale + objResized.cols),
+                    Math.round(scenePt.pt.y * frameScale),
+                  )
+
+                  cv.circle(matchOutput, pt1, 3, [0, 0, 255, 255], -1) // Red in BGR
+                  cv.circle(matchOutput, pt2, 3, [255, 255, 0, 255], -1) // Cyan in BGR
+                }
+
+                // Update canvas
+                if (matchCanvas.width !== matchOutput.cols || matchCanvas.height !== matchOutput.rows) {
+                  matchCanvas.width = matchOutput.cols
+                  matchCanvas.height = matchOutput.rows
+                }
+
+                cv.imshow(matchCanvas, matchOutput)
+
+                // Cleanup
+                objResized.delete()
+                frameResized.delete()
+                matchOutput.delete()
               }
-
-              // Update match canvas size if needed
-              if (matchCanvas.width !== matchOutput.cols || matchCanvas.height !== matchOutput.rows) {
-                matchCanvas.width = matchOutput.cols
-                matchCanvas.height = matchOutput.rows
+              catch (error) {
+                console.error('Error creating match visualization:', error)
               }
-
-              cv.imshow(matchCanvas, matchOutput)
-              matchOutput.delete()
             }
 
             objCorners.delete()
@@ -196,8 +246,8 @@ export function useSurfDetector(cv: CV) {
         scenePoints.delete()
       }
       else {
-        // Just draw the keypoints even if no match
-        cv.drawKeypoints(frame, kp, frame, [255, 0, 0, 255])
+        // Just draw the keypoints even if no match - blue in BGR
+        cv.drawKeypoints(frame, kp, frame, [255, 0, 0, 255]) // Blue in BGR
       }
 
       cv.imshow(canvas, frame)
