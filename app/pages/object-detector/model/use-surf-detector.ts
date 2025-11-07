@@ -17,7 +17,8 @@ export function useSurfDetector(cv: CV) {
     matchCanvas?: HTMLCanvasElement,
   ): DetectorControls {
     const cap = new cv.VideoCapture(video)
-    const frame = new cv.Mat(video.height, video.width, cv.CV_8UC4)
+    // Create frame Mat with video dimensions for VideoCapture compatibility
+    let frame: any = null
 
     const objectMat = cv.imread(objectImg)
     const objectGray = new cv.Mat()
@@ -44,7 +45,25 @@ export function useSurfDetector(cv: CV) {
     function process() {
       if (!isRunning) return
 
-      cap.read(frame)
+      // Wait for video to have valid dimensions and be actually playing
+      if (video.videoWidth === 0 || video.videoHeight === 0 || video.paused || video.ended) {
+        animationFrameId = requestAnimationFrame(process)
+        return
+      }
+
+      // Create frame Mat with exact video dimensions
+      if (!frame || frame.rows !== video.videoHeight || frame.cols !== video.videoWidth) {
+        if (frame) frame.delete()
+        frame = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4)
+      }
+
+      try {
+        cap.read(frame)
+      } catch (error) {
+        console.warn('VideoCapture read error:', error)
+        animationFrameId = requestAnimationFrame(process)
+        return
+      }
       const gray = new cv.Mat()
       cv.cvtColor(frame, gray, cv.COLOR_RGBA2GRAY)
 
@@ -57,7 +76,14 @@ export function useSurfDetector(cv: CV) {
         gray.delete()
         kp.delete()
         desc.delete()
-        cv.imshow(canvas, frame)
+        
+        // Resize canvas to match video if needed
+        if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+          canvas.width = video.videoWidth
+          canvas.height = video.videoHeight
+        }
+        
+        if (frame) cv.imshow(canvas, frame)
         animationFrameId = requestAnimationFrame(process)
         return
       }
@@ -250,7 +276,13 @@ export function useSurfDetector(cv: CV) {
         cv.drawKeypoints(frame, kp, frame, [255, 0, 0, 255]) // Blue in BGR
       }
 
-      cv.imshow(canvas, frame)
+      // Resize canvas to match video if needed
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+      }
+      
+      if (frame) cv.imshow(canvas, frame)
 
       // Cleanup
       gray.delete()
@@ -274,7 +306,7 @@ export function useSurfDetector(cv: CV) {
           animationFrameId = null
         }
         // Cleanup resources
-        frame.delete()
+        if (frame) frame.delete()
         objectMat.delete()
         objectGray.delete()
         objKp.delete()

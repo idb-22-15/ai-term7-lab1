@@ -53,14 +53,16 @@ async function initializeCamera() {
     if (video.value) {
       video.value.srcObject = stream.value
       video.value.onloadedmetadata = () => {
-        // Set canvas size to match video
-        if (canvas.value) {
+        // Set canvas size to match video exactly
+        if (canvas.value && video.value!.videoWidth > 0 && video.value!.videoHeight > 0) {
           canvas.value.width = video.value!.videoWidth
           canvas.value.height = video.value!.videoHeight
         }
-        video.value!.play()
       }
       video.value.oncanplay = () => {
+        video.value!.play()
+      }
+      video.value.oncanplaythrough = () => {
         isCameraReady.value = true
         isCameraLoading.value = false
         // Start showing video feed immediately when camera is ready
@@ -104,7 +106,8 @@ function onFileChange(e: Event) {
   img.src = url
   img.onload = () => {
     objectImage.value = img
-    // Automatically resize object canvas to match image
+    
+    // Draw keypoints on object canvas immediately
     if (objectCanvas.value && img.naturalWidth && img.naturalHeight) {
       const maxWidth = 300
       const maxHeight = 300
@@ -120,6 +123,36 @@ function onFileChange(e: Event) {
 
       objectCanvas.value.width = width
       objectCanvas.value.height = height
+
+      // Draw keypoints immediately using OpenCV
+      try {
+        const objectMat = cv.imread(img)
+        const objectGray = new cv.Mat()
+        cv.cvtColor(objectMat, objectGray, cv.COLOR_RGBA2GRAY)
+        
+        const detector = new cv.ORB()
+        const objKp = new cv.KeyPointVector()
+        const objDesc = new cv.Mat()
+        detector.detectAndCompute(objectGray, new cv.Mat(), objKp, objDesc)
+        
+        // Draw keypoints
+        const objectDisplay = objectMat.clone()
+        cv.drawKeypoints(objectGray, objKp, objectDisplay, [0, 0, 255, 255]) // Red in BGR
+        cv.imshow(objectCanvas.value, objectDisplay)
+        
+        // Cleanup
+        objectDisplay.delete()
+        objectMat.delete()
+        objectGray.delete()
+        objKp.delete()
+        objDesc.delete()
+        detector.delete()
+      } catch (error) {
+        console.error('Error drawing keypoints:', error)
+        // Fallback: just draw the image
+        const ctx = objectCanvas.value.getContext('2d')!
+        ctx.drawImage(img, 0, 0, width, height)
+      }
     }
   }
 }
@@ -135,22 +168,40 @@ function startDetection() {
   }
   if (!video.value || !canvas.value) return
 
-  // Stop video feed to avoid conflict
-  if (videoFeedId !== null) {
-    cancelAnimationFrame(videoFeedId)
-    videoFeedId = null
+  // Ensure video is playing and has valid dimensions
+  if (video.value.paused || video.value.ended) {
+    video.value.play().catch(err => {
+      console.error('Failed to play video:', err)
+      alert('Не удалось запустить видео')
+    })
+    return
   }
 
-  isDetecting.value = true
+  // Wait a bit for video to stabilize
+  setTimeout(() => {
+    if (!video.value || !canvas.value) return
 
-  // Start detection with object canvas and match canvas
-  detectorControls = detectAndMatch(
-    video.value,
-    canvas.value,
-    objectImage.value,
-    objectCanvas.value || undefined,
-    matchCanvas.value || undefined,
-  )
+    // Set canvas to exact video dimensions
+    canvas.value.width = video.value.videoWidth
+    canvas.value.height = video.value.videoHeight
+
+    // Stop video feed to avoid conflict
+    if (videoFeedId !== null) {
+      cancelAnimationFrame(videoFeedId)
+      videoFeedId = null
+    }
+
+    isDetecting.value = true
+
+    // Start detection with object canvas and match canvas
+    detectorControls = detectAndMatch(
+      video.value,
+      canvas.value,
+      objectImage.value,
+      objectCanvas.value || undefined,
+      matchCanvas.value || undefined,
+    )
+  }, 100)
 }
 
 function showVideoFeed() {
