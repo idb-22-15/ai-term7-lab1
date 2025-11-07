@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { useSurfDetector } from './model/use-surf-detector'
+import { useSurfDetector, type DetectorControls } from './model/use-surf-detector'
 import cvPromise, { type CV } from '@techstark/opencv-js'
 
 const cv: CV = await cvPromise
 
 const video = ref<HTMLVideoElement | null>(null)
 const canvas = ref<HTMLCanvasElement | null>(null)
+const objectCanvas = ref<HTMLCanvasElement | null>(null)
+const matchCanvas = ref<HTMLCanvasElement | null>(null)
 const objectImage = ref<HTMLImageElement | null>(null)
 const objectImagePreview = ref<string>('')
 const isDetecting = ref(false)
@@ -16,15 +18,30 @@ const cameraError = ref<string>('')
 const stream = ref<MediaStream>()
 const { detectAndMatch } = useSurfDetector(cv)
 
+let detectorControls: DetectorControls | null = null
+let videoFeedId: number | null = null
+
 onMounted(async () => {
   await initializeCamera()
 })
 
 onUnmounted(() => {
+  cleanup()
+})
+
+function cleanup() {
   if (stream.value) {
     stream.value.getTracks().forEach(track => track.stop())
   }
-})
+  if (detectorControls) {
+    detectorControls.stop()
+    detectorControls = null
+  }
+  if (videoFeedId !== null) {
+    cancelAnimationFrame(videoFeedId)
+    videoFeedId = null
+  }
+}
 
 async function initializeCamera() {
   try {
@@ -87,6 +104,23 @@ function onFileChange(e: Event) {
   img.src = url
   img.onload = () => {
     objectImage.value = img
+    // Automatically resize object canvas to match image
+    if (objectCanvas.value && img.naturalWidth && img.naturalHeight) {
+      const maxWidth = 300
+      const maxHeight = 300
+      let width = img.naturalWidth
+      let height = img.naturalHeight
+
+      // Scale down if needed
+      if (width > maxWidth || height > maxHeight) {
+        const ratio = Math.min(maxWidth / width, maxHeight / height)
+        width = width * ratio
+        height = height * ratio
+      }
+
+      objectCanvas.value.width = width
+      objectCanvas.value.height = height
+    }
   }
 }
 
@@ -99,10 +133,24 @@ function startDetection() {
     alert('Камера не готова')
     return
   }
-  isDetecting.value = true
   if (!video.value || !canvas.value) return
-  // Start detection - video is already showing
-  detectAndMatch(video.value, canvas.value, objectImage.value)
+
+  // Stop video feed to avoid conflict
+  if (videoFeedId !== null) {
+    cancelAnimationFrame(videoFeedId)
+    videoFeedId = null
+  }
+
+  isDetecting.value = true
+
+  // Start detection with object canvas and match canvas
+  detectorControls = detectAndMatch(
+    video.value,
+    canvas.value,
+    objectImage.value,
+    objectCanvas.value || undefined,
+    matchCanvas.value || undefined,
+  )
 }
 
 function showVideoFeed() {
@@ -110,20 +158,24 @@ function showVideoFeed() {
 
   const ctx = canvas.value.getContext('2d')!
   const drawFrame = () => {
-    if (!isCameraReady.value) return
+    if (!isCameraReady.value || isDetecting.value) return
     ctx.drawImage(video.value!, 0, 0, canvas.value!.width, canvas.value!.height)
-    requestAnimationFrame(drawFrame)
+    videoFeedId = requestAnimationFrame(drawFrame)
   }
   drawFrame()
 }
 
 function stopDetection() {
   isDetecting.value = false
-  // Clear canvas
-  if (canvas.value) {
-    const ctx = canvas.value.getContext('2d')!
-    ctx.clearRect(0, 0, canvas.value.width, canvas.value.height)
+
+  // Stop detector
+  if (detectorControls) {
+    detectorControls.stop()
+    detectorControls = null
   }
+
+  // Restart video feed
+  showVideoFeed()
 }
 
 function retryCamera() {
@@ -136,16 +188,17 @@ function retryCamera() {
     <div class="max-w-6xl mx-auto">
       <div class="mb-6">
         <h1 class="text-3xl font-bold text-gray-900 mb-2">
-          Детектор объектов
+          Детектор объектов (ORB)
         </h1>
         <p class="text-gray-600">
-          Загрузите изображение объекта и система будет искать его в реальном времени через камеру
+          Загрузите изображение объекта и система будет искать его в реальном времени через камеру.
+          Маркеры отображаются на видео и эталоне, а линии показывают совпадения.
         </p>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <!-- Camera Feed -->
-        <div class="lg:col-span-2">
+        <div>
           <div class="bg-white rounded-lg shadow-md p-4">
             <div class="flex items-center justify-between mb-4">
               <h2 class="text-xl font-semibold">
@@ -218,8 +271,33 @@ function retryCamera() {
           </div>
         </div>
 
-        <!-- Controls -->
+        <!-- Right side: Object and Controls -->
         <div class="space-y-4">
+          <!-- Object Reference Canvas -->
+          <div class="bg-white rounded-lg shadow-md p-4">
+            <h2 class="text-xl font-semibold mb-4">
+              Эталонное изображение
+            </h2>
+            <div
+              v-if="objectImage"
+              class="flex items-center justify-center border rounded-lg bg-gray-50 min-h-[200px]"
+            >
+              <canvas
+                ref="objectCanvas"
+                class="max-w-full"
+              />
+            </div>
+            <div
+              v-else
+              class="flex items-center justify-center border rounded-lg bg-gray-50 min-h-[200px]"
+            >
+              <p class="text-gray-400 text-sm">
+                Загрузите изображение объекта
+              </p>
+            </div>
+          </div>
+
+          <!-- Controls -->
           <div class="bg-white rounded-lg shadow-md p-4">
             <h2 class="text-xl font-semibold mb-4">
               Управление
@@ -236,21 +314,6 @@ function retryCamera() {
                   class="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
                   @change="onFileChange"
                 >
-
-                <!-- Image preview -->
-                <div
-                  v-if="objectImagePreview"
-                  class="mt-3"
-                >
-                  <p class="text-sm text-gray-600 mb-2">
-                    Превью загруженного изображения:
-                  </p>
-                  <img
-                    :src="objectImagePreview"
-                    alt="Object preview"
-                    class="w-full object-contain rounded-lg border"
-                  >
-                </div>
               </div>
 
               <div class="flex gap-2">
@@ -284,7 +347,35 @@ function retryCamera() {
               >
                 Загрузите изображение объекта для начала анализа.
               </div>
+              <div
+                v-if="isDetecting"
+                class="text-sm text-green-600 bg-green-50 p-2 rounded"
+              >
+                ✓ Детектирование активно. Маркеры отображаются на видео и эталоне.
+              </div>
             </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Match Visualization (full width below) -->
+      <div
+        v-if="isDetecting"
+        class="mt-6"
+      >
+        <div class="bg-white rounded-lg shadow-md p-4">
+          <h2 class="text-xl font-semibold mb-4">
+            Визуализация совпадений
+          </h2>
+          <p class="text-sm text-gray-600 mb-3">
+            Зелёные линии - лучшие совпадения (топ-10), жёлтые - хорошие совпадения.
+            Красные маркеры - эталон, голубые - обнаруженные на видео.
+          </p>
+          <div class="overflow-x-auto border rounded-lg bg-gray-50">
+            <canvas
+              ref="matchCanvas"
+              class="max-w-full"
+            />
           </div>
         </div>
       </div>
