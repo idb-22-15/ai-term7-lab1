@@ -181,6 +181,14 @@ function startDetection() {
   setTimeout(() => {
     if (!video.value || !canvas.value) return
 
+    // Ensure video is actually playing and has dimensions
+    console.log('Starting detection with video dimensions:', video.value.videoWidth, 'x', video.value.videoHeight)
+    
+    if (video.value.videoWidth === 0 || video.value.videoHeight === 0) {
+      alert('Видео еще не готово. Попробуйте еще раз.')
+      return
+    }
+
     // Set canvas to exact video dimensions
     canvas.value.width = video.value.videoWidth
     canvas.value.height = video.value.videoHeight
@@ -201,7 +209,7 @@ function startDetection() {
       objectCanvas.value || undefined,
       matchCanvas.value || undefined,
     )
-  }, 100)
+  }, 500) // Increased delay for better stabilization
 }
 
 function showVideoFeed() {

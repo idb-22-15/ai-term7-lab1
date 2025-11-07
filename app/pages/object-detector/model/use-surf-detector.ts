@@ -16,8 +16,8 @@ export function useSurfDetector(cv: CV) {
     objectCanvas?: HTMLCanvasElement,
     matchCanvas?: HTMLCanvasElement,
   ): DetectorControls {
-    const cap = new cv.VideoCapture(video)
-    // Create frame Mat with video dimensions for VideoCapture compatibility
+    // Use canvas-based approach instead of VideoCapture
+    const ctx = canvas.getContext('2d')!
     let frame: any = null
 
     const objectMat = cv.imread(objectImg)
@@ -51,16 +51,25 @@ export function useSurfDetector(cv: CV) {
         return
       }
 
-      // Create frame Mat with exact video dimensions
-      if (!frame || frame.rows !== video.videoHeight || frame.cols !== video.videoWidth) {
+      // Ensure canvas matches video dimensions
+      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+      }
+
+      // Create frame Mat with canvas dimensions
+      if (!frame || frame.rows !== canvas.height || frame.cols !== canvas.width) {
         if (frame) frame.delete()
-        frame = new cv.Mat(video.videoHeight, video.videoWidth, cv.CV_8UC4)
+        frame = new cv.Mat(canvas.height, canvas.width, cv.CV_8UC4)
       }
 
       try {
-        cap.read(frame)
+        // Draw video frame to canvas first
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height)
+        // Then read from canvas to Mat
+        frame = cv.imread(canvas)
       } catch (error) {
-        console.warn('VideoCapture read error:', error)
+        console.warn('Frame capture error:', error)
         animationFrameId = requestAnimationFrame(process)
         return
       }
@@ -276,12 +285,7 @@ export function useSurfDetector(cv: CV) {
         cv.drawKeypoints(frame, kp, frame, [255, 0, 0, 255]) // Blue in BGR
       }
 
-      // Resize canvas to match video if needed
-      if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-      }
-      
+      // Canvas already has the video frame, just show the processed result
       if (frame) cv.imshow(canvas, frame)
 
       // Cleanup
