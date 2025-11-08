@@ -29,43 +29,60 @@ onUnmounted(() => {
   cleanup()
 })
 
+/**
+ * Очищает все активные ресурсы при размонтировании компонента
+ * Останавливает видеопоток, детектор и анимационные кадры
+ */
 function cleanup() {
+  // Останавливаем все треки видеопотока
   if (stream.value) {
     stream.value.getTracks().forEach(track => track.stop())
   }
+  // Останавливаем детектор объектов
   if (detectorControls) {
     detectorControls.stop()
     detectorControls = null
   }
+  // Отменяем анимационный кадр для отображения видео
   if (videoFeedId !== null) {
     cancelAnimationFrame(videoFeedId)
     videoFeedId = null
   }
 }
 
+/**
+ * Инициализирует камеру и настраивает видеопоток
+ * Запрашивает доступ к камере, устанавливает размеры canvas и начинает отображение видео
+ * @throws {Error} При ошибке доступа к камере
+ */
 async function initializeCamera() {
   try {
     isCameraLoading.value = true
     cameraError.value = ''
 
+    // Запрашиваем доступ к камере
     stream.value = await navigator.mediaDevices.getUserMedia({ video: true })
 
     if (video.value) {
       video.value.srcObject = stream.value
+
+      // Устанавливаем обработчики событий видео
       video.value.onloadedmetadata = () => {
-        // Set canvas size to match video exactly
+        // Устанавливаем размеры canvas точно соответствующие видео
         if (canvas.value && video.value!.videoWidth > 0 && video.value!.videoHeight > 0) {
           canvas.value.width = video.value!.videoWidth
           canvas.value.height = video.value!.videoHeight
         }
       }
+
       video.value.oncanplay = () => {
         video.value!.play()
       }
+
       video.value.oncanplaythrough = () => {
         isCameraReady.value = true
         isCameraLoading.value = false
-        // Start showing video feed immediately when camera is ready
+        // Начинаем отображение видеопотока сразу после готовности камеры
         showVideoFeed()
       }
     }
@@ -75,6 +92,7 @@ async function initializeCamera() {
     isCameraLoading.value = false
     isCameraReady.value = false
 
+    // Обрабатываем различные типы ошибок доступа к камере
     const err = error as Error & { name: string }
     if (err.name === 'NotAllowedError') {
       cameraError.value = 'Доступ к камере запрещен. Разрешите доступ в настройках браузера.'
@@ -91,6 +109,11 @@ async function initializeCamera() {
   }
 }
 
+/**
+ * Обрабатывает загрузку файла изображения объекта
+ * Создает превью, извлекает ключевые точки ORB и отображает их на canvas
+ * @param e - Событие изменения input file
+ */
 function onFileChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
   if (!file) {
@@ -106,15 +129,15 @@ function onFileChange(e: Event) {
   img.src = url
   img.onload = () => {
     objectImage.value = img
-    
-    // Draw keypoints on object canvas immediately
+
+    // Сразу рисуем ключевые точки на canvas объекта
     if (objectCanvas.value && img.naturalWidth && img.naturalHeight) {
       const maxWidth = 300
       const maxHeight = 300
       let width = img.naturalWidth
       let height = img.naturalHeight
 
-      // Scale down if needed
+      // Масштабируем изображение если необходимо
       if (width > maxWidth || height > maxHeight) {
         const ratio = Math.min(maxWidth / width, maxHeight / height)
         width = width * ratio
@@ -124,32 +147,36 @@ function onFileChange(e: Event) {
       objectCanvas.value.width = width
       objectCanvas.value.height = height
 
-      // Draw keypoints immediately using OpenCV
+      // Сразу рисуем ключевые точки используя OpenCV
       try {
+        // Конвертируем изображение в формат OpenCV Mat
         const objectMat = cv.imread(img)
         const objectGray = new cv.Mat()
         cv.cvtColor(objectMat, objectGray, cv.COLOR_RGBA2GRAY)
-        
+
+        // Создаем детектор ORB и извлекаем ключевые точки
         const detector = new cv.ORB()
         const objKp = new cv.KeyPointVector()
         const objDesc = new cv.Mat()
         detector.detectAndCompute(objectGray, new cv.Mat(), objKp, objDesc)
-        
-        // Draw keypoints
+
+        // Рисуем ключевые точки
         const objectDisplay = objectMat.clone()
-        cv.drawKeypoints(objectGray, objKp, objectDisplay, [0, 0, 255, 255]) // Red in BGR
+        // Красный цвет в BGR формате для OpenCV
+        cv.drawKeypoints(objectGray, objKp, objectDisplay, [0, 0, 255, 255])
         cv.imshow(objectCanvas.value, objectDisplay)
-        
-        // Cleanup
+
+        // Очищаем память OpenCV
         objectDisplay.delete()
         objectMat.delete()
         objectGray.delete()
         objKp.delete()
         objDesc.delete()
         detector.delete()
-      } catch (error) {
+      }
+      catch (error) {
         console.error('Error drawing keypoints:', error)
-        // Fallback: just draw the image
+        // Запасной вариант: просто рисуем изображение
         const ctx = objectCanvas.value.getContext('2d')!
         ctx.drawImage(img, 0, 0, width, height)
       }
@@ -157,6 +184,10 @@ function onFileChange(e: Event) {
   }
 }
 
+/**
+ * Запускает процесс детекции объектов
+ * Проверяет готовность системы и начинает анализ видеопотока с использованием ORB
+ */
 function startDetection() {
   if (!objectImage.value) {
     alert('Пожалуйста, загрузите образ для поиска')
@@ -168,32 +199,32 @@ function startDetection() {
   }
   if (!video.value || !canvas.value) return
 
-  // Ensure video is playing and has valid dimensions
+  // Убеждаемся что видео воспроизводится и имеет корректные размеры
   if (video.value.paused || video.value.ended) {
-    video.value.play().catch(err => {
+    video.value.play().catch((err) => {
       console.error('Failed to play video:', err)
       alert('Не удалось запустить видео')
     })
     return
   }
 
-  // Wait a bit for video to stabilize
+  // Ждем немного для стабилизации видео
   setTimeout(() => {
     if (!video.value || !canvas.value) return
 
-    // Ensure video is actually playing and has dimensions
+    // Убеждаемся что видео действительно воспроизводится и имеет размеры
     console.log('Starting detection with video dimensions:', video.value.videoWidth, 'x', video.value.videoHeight)
-    
+
     if (video.value.videoWidth === 0 || video.value.videoHeight === 0) {
       alert('Видео еще не готово. Попробуйте еще раз.')
       return
     }
 
-    // Set canvas to exact video dimensions
+    // Устанавливаем размеры canvas точно соответствующие видео
     canvas.value.width = video.value.videoWidth
     canvas.value.height = video.value.videoHeight
 
-    // Stop video feed to avoid conflict
+    // Останавливаем отображение видеопотока чтобы избежать конфликтов
     if (videoFeedId !== null) {
       cancelAnimationFrame(videoFeedId)
       videoFeedId = null
@@ -201,7 +232,7 @@ function startDetection() {
 
     isDetecting.value = true
 
-    // Start detection with object canvas and match canvas
+    // Запускаем детекцию с canvas объекта и canvas совпадений
     detectorControls = detectAndMatch(
       video.value,
       canvas.value,
@@ -209,14 +240,19 @@ function startDetection() {
       objectCanvas.value || undefined,
       matchCanvas.value || undefined,
     )
-  }, 500) // Increased delay for better stabilization
+  }, 500) // Увеличенная задержка для лучшей стабилизации
 }
 
+/**
+ * Отображает видеопоток на canvas в реальном времени
+ * Используется когда детекция не активна для показа живого видео
+ */
 function showVideoFeed() {
   if (!video.value || !canvas.value) return
 
   const ctx = canvas.value.getContext('2d')!
   const drawFrame = () => {
+    // Прерываем отрисовку если камера не готова или началась детекция
     if (!isCameraReady.value || isDetecting.value) return
     ctx.drawImage(video.value!, 0, 0, canvas.value!.width, canvas.value!.height)
     videoFeedId = requestAnimationFrame(drawFrame)
@@ -224,19 +260,27 @@ function showVideoFeed() {
   drawFrame()
 }
 
+/**
+ * Останавливает процесс детекции объектов
+ * Прекращает анализ и возобновляет отображение обычного видеопотока
+ */
 function stopDetection() {
   isDetecting.value = false
 
-  // Stop detector
+  // Останавливаем детектор
   if (detectorControls) {
     detectorControls.stop()
     detectorControls = null
   }
 
-  // Restart video feed
+  // Возобновляем отображение видеопотока
   showVideoFeed()
 }
 
+/**
+ * Повторно инициализирует камеру после ошибки
+ * Используется для повторной попытки подключения к камере
+ */
 function retryCamera() {
   initializeCamera()
 }
